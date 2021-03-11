@@ -2,6 +2,8 @@
 # Write ifconfig rx and tx stats to influx
 # ENV
 # DEBUG: do not delete mktemp dir
+# INFLUX_ORG: optional env var, -o overrides
+# INFLUX_BUCKET: optional env var, -b overrides
 # CRONTAB
 # * * * * * /share/homes/admin/ifconfig/ifconfig.sh root@192.168.1.1 router TOKEN
 # * * * * * /share/homes/admin/ifconfig/ifconfig.sh localhost qn TOKEN
@@ -23,32 +25,32 @@ INFLUX_ORG=${INFLUX_ORG:-lan}
 INFLUX_BUCKET=${INFLUX_BUCKET:-home}
 EXIT=0
 while getopts h:a:t:d:o:b arg; do
-  case arg in
+  case $arg in
     # required
     a) ALIAS=$OPTARG;;
     h) HOST=$OPTARG;;
     t) TOKEN=$OPTARG;;
     # optional
     b) INFLUX_BUCKET=$OPTARG;;
-    d) DEBUG_INPUT=$OPTARG;;
+    d) DEBUG_INPUT=$OPTARG; DEBUG=true; set -x;;
     o) INFLUX_ORG=$OPTARG;;
     *) usage; exit;;
   esac
 done
-${HOST:?Missing host}
-${ALIAS:?Missing alias name}
-${TOKEN:?Missing token}
 if [[ $DEBUG = true ]]; then
+  echo LOG /tmp/ifconfig.$$.log 
   exec >/tmp/ifconfig.$$.log 2>&1
 fi
+echo ${HOST:?Missing host} >/dev/null
+echo ${ALIAS:?Missing alias name} >/dev/null
+echo ${TOKEN:?Missing token} >/dev/null
 # busybox date is a little funny
 TIME=$(date --rfc-3339=seconds| sed 's/ /T/')
 DIR=$(mktemp -u)
-trap '[ "$DEBUG" != true ] && rm -rf $DIR; exit $EXIT' EXIT
-trap '[ "$DEBUG" != true ] && rm -rf $DIR; exit 1' TERM INT
-
 OUTPUT=$DIR/out.csv
-echo -e "#datatype measurement,tag,tag,tag,tag,field,dateTime:RFC3339\nm,iface,stat,dir,host,long,time" > $OUTPUT
+mkdir -p $DIR
+trap '[ "$DEBUG" != true ] && rm -rf $DIR; [[ $EXIT != 0 ]] && exit $EXIT' EXIT
+trap '[ "$DEBUG" != true ] && rm -rf $DIR; exit 1' TERM INT
 
 if [[ -f $DEBUG_INPUT ]]; then
   cp $DEBUG_INPUT $DIR/ifconfig
@@ -56,7 +58,7 @@ elif [[ $HOST =~ localhost ]]; then
   ifconfig > $DIR/ifconfig
 else
   ssh -o ConnectTimeout=3 $HOST ifconfig > $DIR/ifconfig
-  [[ $? -ne 0 ]] && EXIT=2 exit
+  [[ $? -ne 0 ]] && exit 2
 fi
 
 SCRIPT=${0%/*}/parse.py
@@ -69,4 +71,9 @@ docker exec -t influxdb rm -rf $DIR
 if [[ -e $DIR/influx-errors ]] && [[ ! -s $DIR/influx-errors ]]; then
   cat $DIR/influx-errors 1>&2
   EXIT=$(wc -l $DIR/influx-errors)
+fi
+
+if [[ $DEBUG = true ]]; then
+  echo =======
+  cat $OUTPUT
 fi
