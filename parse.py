@@ -25,7 +25,7 @@ host_alias = sys.argv[2]
 epoch = sys.argv[3]
 # influx csv requirements
 with open(output, "w") as f:
-	f.write("#datatype measurement,tag,tag,tag,tag,field,dateTime:RFC3339\nm,iface,stat,dir,host,long,time\n")
+	f.write("#datatype measurement,tag,tag,tag,tag,usignedLong:field,dateTime:RFC3339\nm,iface,stat,dir,host,long,time\n")
 
 for line in sys.stdin:
 	m = re.match('^([\w.]+)', line)

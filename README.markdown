@@ -1,6 +1,6 @@
 # LAN scripts
 
-Store ifconfig stats, including RX/TX errors, drops, overruns, packets, in an influxdb
+Store ifconfig stats, including RX/TX errors, drops, overruns, packets, in influxdb
 
 Stats are stored in a bucket, the measurement is called ifconfig
 
@@ -21,17 +21,31 @@ Stats are stored in a bucket, the measurement is called ifconfig
     * __ARG 2__: host alias, an influxdb tag
     * __ARG 3__: RFC 3339 date
 
+## Influx setup
+
+```
+docker volume create influxdb2_data
+docker volume create influxdb2_etc_data
+
+docker create --name influxdb2 \
+  -v influxdb2_etc_data:/etc/influxdb2 \
+  -v influxdb2_data:/var/lib/influxdb2 \
+  -p 8086:8086 \
+  influxdb:2.0
+```
+
 ## Influx Query
 
 ```
 from(bucket: "home")
   |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
-  |> filter(fn: (r) => r["_measurement"] == "ifconfig")
-  |> filter(fn: (r) => r["_field"] == "long")
-  |> filter(fn: (r) => r["dir"] == "rx" or r["dir"] == "tx")
-  |> filter(fn: (r) => r["host"] == "router")
-  |> filter(fn: (r) => r["iface"] == "eth1")
-  |> filter(fn: (r) => r["stat"] == "dropped" or r["stat"] == "errors" or r["stat"] == "overruns")
+  |> filter(fn: (r) => r["_measurement"] == "ifconfig" and
+       r["_field"] == "long" and
+       (r["dir"] == "rx" or r["dir"] == "tx") and
+       r["host"] == "router" and
+       r["iface"] == "eth1" and
+       (r["stat"] == "dropped" or r["stat"] == "errors" or r["stat"] == "overruns"))
   |> aggregateWindow(every: 1m, fn: last, createEmpty: false)
   |> yield(name: "last")
 ```
+
